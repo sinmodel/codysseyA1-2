@@ -1,8 +1,10 @@
 import argparse
 import json
+import os
 from datetime import datetime
 from pathlib import Path
-
+from google import genai
+import requests
 
 def validate_date(date_text):
     try:
@@ -12,80 +14,71 @@ def validate_date(date_text):
         return False
 
 def get_travel_recommendation(date_text):
-    recommendation = {
-        "recommended_cities": [
-            "대전",
-            "공주",
-            "청주"
-        ],
-        "weather": "맑고 선선한 가을 날씨",
-        "events": [
-            "가을 단풍 명소 방문"
-        ],
-        "reason": "가을 풍경과 자연을 즐기기 좋은 지역을 추천했습니다."
-    }
+    client = genai.Client()
+
+    interaction = client.interactions.create(
+        model="gemini-3.8-flash",
+        input=f"""
+    {date_text} 국내 여행지를 추천해줘.
+
+    다음 JSON 형식으로만 답해줘.
+    {{
+        "recommended_cities": ["지역1", "지역2", "지역3"],
+        "weather": "날씨 설명",
+        "events": ["행사 또는 볼거리"],
+        "reason": "추천 이유"
+    }}
+
+    설명이나 마크다운은 넣지 말고 JSON만 출력해줘.
+    """
+    )
+
+    print("Gemini 응답:", interaction.output_text)
+
+    recommendation = json.loads(interaction.output_text)
+    
+    print("Python 데이터:", recommendation)
 
     return recommendation
 
 def search_restaurants(city):
-    restaurants = {
-        "대전": [
-            {
-                "name": "대전 맛집 1",
-                "address": "대전광역시 중구",
-                "category": "한식",
-                "url": "",
-                "x": "127.3845",
-                "y": "36.3504"
-            },
-            {
-                "name": "대전 맛집 2",
-                "address": "대전광역시 서구",
-                "category": "한식",
-                "url": "",
-                "x": "127.3680",
-                "y": "36.3550"
-            }
-        ],
-        "공주": [
-            {
-                "name": "공주 맛집 1",
-                "address": "충청남도 공주시",
-                "category": "한식",
-                "url": "",
-                "x": "127.1190",
-                "y": "36.4465"
-            },
-            {
-                "name": "공주 맛집 2",
-                "address": "충청남도 공주시",
-                "category": "한식",
-                "url": "",
-                "x": "127.1100",
-                "y": "36.4500"
-            }
-        ],
-        "청주": [
-            {
-                "name": "청주 맛집 1",
-                "address": "충청북도 청주시",
-                "category": "한식",
-                "url": "",
-                "x": "127.4890",
-                "y": "36.6424"
-            },
-            {
-                "name": "청주 맛집 2",
-                "address": "충청북도 청주시",
-                "category": "한식",
-                "url": "",
-                "x": "127.4850",
-                "y": "36.6350"
-            }
-        ]
+    api_key = os.getenv("KAKAO_REST_API_KEY")
+
+    url = "https://dapi.kakao.com/v2/local/search/keyword.json"
+
+    headers = {
+        "Authorization": f"KakaoAK {api_key}"
     }
 
-    return restaurants.get(city, [])
+    params = {
+        "query": f"{city} 맛집",
+        "size": 5
+    }
+
+    response = requests.get(
+        url,
+        headers=headers,
+        params=params,
+        timeout=10
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    restaurants = []
+
+    for place in data["documents"]:
+        restaurants.append({
+            "name": place["place_name"],
+            "address": place["road_address_name"] or place["address_name"],
+            "category": place["category_name"],
+            "url": place["place_url"],
+            "x": place["x"],
+            "y": place["y"]
+        })
+
+    return restaurants
 
 def generate_travel_report(date_text, recommendation):
     report = []
