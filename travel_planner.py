@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from google import genai
+from google.genai._gaos.lib.compat_errors import RateLimitError
 import requests
 
 def validate_date(date_text):
@@ -16,9 +17,10 @@ def validate_date(date_text):
 def get_travel_recommendation(date_text):
     client = genai.Client()
 
-    interaction = client.interactions.create(
-        model="gemini-3.8-flash",
-        input=f"""
+    try:
+        interaction = client.interactions.create(
+            model="gemini-3.8-flash",
+            input=f"""
     {date_text} 국내 여행지를 추천해줘.
 
     다음 JSON 형식으로만 답해줘.
@@ -31,7 +33,12 @@ def get_travel_recommendation(date_text):
 
     설명이나 마크다운은 넣지 말고 JSON만 출력해줘.
     """
-    )
+        )
+
+    except RateLimitError:
+        print("[오류] Gemini API 사용량 제한(429)에 도달했습니다.")
+        print("무료 사용량 제한을 확인한 후 다시 실행하세요.")
+        return None
 
     print("Gemini 응답:", interaction.output_text)
 
@@ -55,30 +62,47 @@ def search_restaurants(city):
         "size": 5
     }
 
-    response = requests.get(
-        url,
-        headers=headers,
-        params=params,
-        timeout=10
-    )
+    try:
+        response = requests.get(
+            url,
+            headers=headers,
+            params=params,
+            timeout=10
+        )
 
-    response.raise_for_status()
+        if response.status_code == 401:
+            print(f"[오류] {city}: Kakao API 인증 실패 (401)")
+            return []
 
-    data = response.json()
+        if response.status_code == 403:
+            print(f"[오류] {city}: Kakao API 접근 권한 없음 (403)")
+            return []
 
-    restaurants = []
+        response.raise_for_status()
 
-    for place in data["documents"]:
-        restaurants.append({
-            "name": place["place_name"],
-            "address": place["road_address_name"] or place["address_name"],
-            "category": place["category_name"],
-            "url": place["place_url"],
-            "x": place["x"],
-            "y": place["y"]
-        })
+        data = response.json()
 
-    return restaurants
+        if not data["documents"]:
+            print(f"[안내] {city}: 검색 결과가 없습니다.")
+            return []
+
+        restaurants = []
+
+        for place in data["documents"]:
+            restaurants.append({
+                "name": place["place_name"],
+                "address": place["road_address_name"] or place["address_name"],
+                "category": place["category_name"],
+                "url": place["place_url"],
+                "x": place["x"],
+                "y": place["y"]
+            })
+
+        return restaurants
+
+    except requests.RequestException as e:
+        print(f"[오류] {city}: Kakao API 요청 실패 - {e}")
+        return []
 
 def generate_travel_report(date_text, recommendation):
     report = []
@@ -144,6 +168,24 @@ def generate_travel_report(date_text, recommendation):
 
     return "\n".join(report)
 
+def check_api_keys():
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    kakao_key = os.getenv("KAKAO_REST_API_KEY")
+
+    if not gemini_key:
+        print("GEMINI_API_KEY가 설정되지 않았습니다.")
+        print("Windows CMD에서 다음과 같이 설정하세요:")
+        print("set GEMINI_API_KEY=발급받은_Gemini_API_키")
+        return False
+
+    if not kakao_key:
+        print("KAKAO_REST_API_KEY가 설정되지 않았습니다.")
+        print("Windows CMD에서 다음과 같이 설정하세요:")
+        print("set KAKAO_REST_API_KEY=발급받은_Kakao_REST_API_키")
+        return False
+
+    return True
+
 def main():
     parser = argparse.ArgumentParser(
         description="대전 중심 국내 가을 여행 추천 프로그램"
@@ -157,6 +199,9 @@ def main():
     )
 
     args = parser.parse_args()
+
+    if not check_api_keys():
+       return
 
     if not validate_date(args.date):
         print("오류: 날짜 형식이 올바르지 않습니다.")
@@ -172,6 +217,10 @@ def main():
     print(f"여행 날짜: {args.date}")
     
     recommendation = get_travel_recommendation(args.date)
+    
+    if recommendation is None:
+        return
+    
     print(recommendation)
 
     restaurant_results = {}
