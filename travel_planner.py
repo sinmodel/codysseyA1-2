@@ -42,13 +42,42 @@ def get_travel_recommendation(date_text):
 
     print("Gemini 응답:", interaction.output_text)
 
-    recommendation = json.loads(interaction.output_text)
-    
+    try:
+        recommendation = json.loads(interaction.output_text)
+
+    except json.JSONDecodeError:
+        print("[안내] Gemini 응답을 JSON으로 변환하지 못했습니다.")
+        print("[안내] JSON 형식으로 다시 요청합니다.")
+
+        try:
+            retry_interaction = client.interactions.create(
+                model="gemini-3.8-flash",
+                input=f"""
+        {date_text} 국내 여행지를 추천해줘.
+
+        반드시 아래 JSON 형식만 출력해줘.
+        다른 설명, 마크다운, 코드 블록은 절대 포함하지 마.
+
+        {{
+            "recommended_cities": ["지역1", "지역2", "지역3"],
+            "weather": "날씨 설명",
+            "events": ["행사 또는 볼거리"],
+            "reason": "추천 이유"
+        }}
+         """
+            )
+
+            recommendation = json.loads(retry_interaction.output_text)
+
+        except json.JSONDecodeError:
+            print("[오류] 재시도 후에도 JSON 형식으로 변환하지 못했습니다.")
+            return None
+
     print("Python 데이터:", recommendation)
 
     return recommendation
 
-def search_restaurants(city):
+def search_restaurants(city, errors):
     api_key = os.getenv("KAKAO_REST_API_KEY")
 
     url = "https://dapi.kakao.com/v2/local/search/keyword.json"
@@ -72,10 +101,12 @@ def search_restaurants(city):
 
         if response.status_code == 401:
             print(f"[오류] {city}: Kakao API 인증 실패 (401)")
+            errors.append(f"{city}: Kakao API 인증 실패 (401)")
             return []
 
         if response.status_code == 403:
             print(f"[오류] {city}: Kakao API 접근 권한 없음 (403)")
+            errors.append(f"{city}: Kakao API 접근 권한 없음 (403)")
             return []
 
         response.raise_for_status()
@@ -102,12 +133,13 @@ def search_restaurants(city):
 
     except requests.RequestException as e:
         print(f"[오류] {city}: Kakao API 요청 실패 - {e}")
+        errors.append(f"{city}: Kakao API 요청 실패 - {e}")
         return []
 
 def generate_travel_report(date_text, recommendation):
     report = []
 
-    report.append("# 국내 가을 여행 추천")
+    report.append("# 국내 여행 추천")
     report.append("")
     report.append(f"- 여행 날짜: {date_text}")
     report.append("")
@@ -157,7 +189,7 @@ def generate_travel_report(date_text, recommendation):
     report.append("## 1일 여행 일정")
     report.append("")
     report.append("### 오전")
-    report.append("- 가을 단풍 명소와 자연 풍경을 감상합니다.")
+    report.append("- 국내 명소와 자연 풍경을 감상합니다.")
     report.append("")
     report.append("### 오후")
     report.append("- 지역 맛집에서 점심을 먹고 주변 관광지를 둘러봅니다.")
@@ -188,7 +220,7 @@ def check_api_keys():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="대전 중심 국내 가을 여행 추천 프로그램"
+        description="국내 여행 추천 프로그램"
     )
 
     parser.add_argument(
@@ -201,56 +233,46 @@ def main():
     args = parser.parse_args()
 
     if not check_api_keys():
-       return
+        return
 
     if not validate_date(args.date):
         print("오류: 날짜 형식이 올바르지 않습니다.")
         print("사용법: python travel_planner.py --date YYYY-MM-DD")
         return
-
+    print("[1/3] 여행 날짜 확인 완료")
     results_dir = Path("results")
     results_dir.mkdir(exist_ok=True)
-
     print("========================================")
-    print("     🍁 대전 가을 여행 추천 프로그램")
+    print("      [KR] 국내 여행 추천 프로그램")
     print("========================================")
     print(f"여행 날짜: {args.date}")
-    
+    print("[2/3] 여행지 추천 준비 중...")
     recommendation = get_travel_recommendation(args.date)
-    
+
     if recommendation is None:
         return
     
     print(recommendation)
-
+    print("[3/3] 맛집 검색 및 여행 리포트 준비 중...")
+    recommendation["errors"] = []
     restaurant_results = {}
 
     for city in recommendation["recommended_cities"]:
-        restaurant_results[city] = search_restaurants(city)
-
+        restaurant_results[city] = search_restaurants(city, recommendation["errors"])
     recommendation["restaurants"] = restaurant_results
-    recommendation["errors"] = []
-
     result_file = results_dir / f"{args.date}.json"
 
     with open(result_file, "w", encoding="utf-8") as file:
         json.dump(recommendation, file, ensure_ascii=False, indent=2)
-
     print(f"결과 저장: {result_file}")
 
     report = generate_travel_report(args.date, recommendation)
-
     report_file = results_dir / f"{args.date}.md"
 
     with open(report_file, "w", encoding="utf-8") as file:
         file.write(report)
-
     print(f"리포트 저장: {report_file}")
 
-    print()
-    print("[1/3] 여행 날짜 확인 완료")
-    print("[2/3] 여행지 추천 준비 중...")
-    print("[3/3] 맛집 검색 및 여행 리포트 준비 중...")
     print()
     print("프로그램 기본 설정이 완료되었습니다.")
 
