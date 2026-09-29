@@ -267,6 +267,29 @@ def main():
     print("[1/3] 여행 날짜 확인 완료")
     results_dir = Path("results")
     results_dir.mkdir(exist_ok=True)
+    result_file = results_dir / f"{args.date}.json"
+
+    if result_file.exists():
+        print("[2/3] 기존 결과를 사용합니다.")
+
+        try:
+            with open(result_file, "r", encoding="utf-8") as file:
+                recommendation = json.load(file)
+
+        except json.JSONDecodeError:
+            print("[안내] 기존 JSON 파일을 읽지 못해 새로 요청합니다.")
+        else:
+            print("[안내] API를 다시 호출하지 않습니다.")
+
+            report = generate_travel_report(args.date, recommendation)
+
+            report_file = results_dir / f"{args.date}.md"
+
+            with open(report_file, "w", encoding="utf-8") as file:
+                file.write(report)
+
+            print(f"리포트 저장: {report_file}")
+            return
     print("========================================")
     print("      [KR] 국내 여행 추천 프로그램")
     print("========================================")
@@ -285,7 +308,6 @@ def main():
     for city in recommendation["recommended_cities"]:
         restaurant_results[city] = search_restaurants(city, recommendation["errors"])
     recommendation["restaurants"] = restaurant_results
-    result_file = results_dir / f"{args.date}.json"
 
     with open(result_file, "w", encoding="utf-8") as file:
         json.dump(recommendation, file, ensure_ascii=False, indent=2)
