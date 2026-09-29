@@ -73,6 +73,23 @@ def get_travel_recommendation(date_text):
             print("[오류] 재시도 후에도 JSON 형식으로 변환하지 못했습니다.")
             return None
 
+    required_keys = ["recommended_cities", "weather", "events", "reason"]
+
+    if not all(key in recommendation for key in required_keys):
+        print("[오류] Gemini 응답에 필요한 항목이 없습니다.")
+        return None
+
+    if not isinstance(recommendation["recommended_cities"], list):
+        print("[오류] recommended_cities 형식이 올바르지 않습니다.")
+        return None
+
+    if not 2 <= len(recommendation["recommended_cities"]) <= 3:
+        print("[오류] 추천 지역은 2~3개여야 합니다.")
+        return None
+
+    if not isinstance(recommendation["events"], list):
+        print("[오류] events 형식이 올바르지 않습니다.")
+        return None
     print("Python 데이터:", recommendation)
 
     return recommendation
