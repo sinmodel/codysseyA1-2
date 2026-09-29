@@ -87,6 +87,9 @@ def get_travel_recommendation(date_text):
         print("[오류] 추천 지역은 2~3개여야 합니다.")
         return None
 
+    if not all(isinstance(city, str) for city in recommendation["recommended_cities"]):
+        print("[오류] 추천 지역 이름의 형식이 올바르지 않습니다.")
+        return None
     if not isinstance(recommendation["events"], list):
         print("[오류] events 형식이 올바르지 않습니다.")
         return None
