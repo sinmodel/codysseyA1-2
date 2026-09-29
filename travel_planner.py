@@ -90,6 +90,14 @@ def get_travel_recommendation(date_text):
     if not isinstance(recommendation["events"], list):
         print("[오류] events 형식이 올바르지 않습니다.")
         return None
+
+    if not isinstance(recommendation["weather"], str):
+        print("[오류] weather 형식이 올바르지 않습니다.")
+        return None
+
+    if not isinstance(recommendation["reason"], str):
+        print("[오류] reason 형식이 올바르지 않습니다.")
+        return None
     print("Python 데이터:", recommendation)
 
     return recommendation
