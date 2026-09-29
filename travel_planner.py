@@ -155,6 +155,10 @@ def search_restaurants(city, errors):
             })
 
         return restaurants
+    except ValueError as e:
+        print(f"[오류] {city}: Kakao API 응답 형식 오류 - {e}")
+        errors.append(f"{city}: Kakao API 응답 형식 오류 - {e}")
+        return []
 
     except requests.RequestException as e:
         print(f"[오류] {city}: Kakao API 요청 실패 - {e}")
