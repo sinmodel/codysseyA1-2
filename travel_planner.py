@@ -163,6 +163,10 @@ def search_restaurants(city, errors):
         errors.append(f"{city}: Kakao API 응답 형식 오류 - {e}")
         return []
 
+    except (KeyError, TypeError) as e:
+        print(f"[오류] {city}: Kakao 데이터 형식 오류 - {e}")
+        errors.append(f"{city}: Kakao 데이터 형식 오류 - {e}")
+        return []
     except requests.RequestException as e:
         print(f"[오류] {city}: Kakao API 요청 실패 - {e}")
         errors.append(f"{city}: Kakao API 요청 실패 - {e}")
